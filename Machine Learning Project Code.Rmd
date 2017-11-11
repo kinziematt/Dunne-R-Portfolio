@@ -1,0 +1,132 @@
+---
+title: "Course Project"
+author: "Matthew Dunne"
+date: "October 18, 2017"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+#Executive Summary
+This analysis uses data from human activity recognition research. This data was collected to predict "which" activity was performed at a specific point in time. We will assess various predictive models for accuracy.
+
+
+#Choosing Variables and Pre-Processing
+We will use **cross-validation** by using both a training set of data and a testing set of data. All models will be formed on the training data and tested for accuracy on the testing data.
+
+We will not use all variables in the training data. This is for two reasons: (1) some variables are not in the test data and hence have no predictive value for that data, and (2) more variables in the model does not always increase accuracy.
+
+```{r read, cache=TRUE, message=FALSE, warning=F}
+setwd("C:/Users/uawe/Desktop/Coursera/Data Science Specialization/Course 8 Machine Learning/Course Project")
+train=read.csv("pml-training.csv")
+test=read.csv("pml-testing.csv")
+```
+
+```{r clean, cache=TRUE, message=FALSE, warning=F}
+##take out all columns from train set with no info in test set
+a<-grep("kurtosis_roll_belt", colnames(train))
+b<-grep("var_yaw_belt", colnames(train))
+c<-grep("var_accel_arm", colnames(train))
+d<-grep("var_yaw_arm", colnames(train))
+e<-grep("kurtosis_roll_arm", colnames(train))
+f<-grep("amplitude_yaw_arm", colnames(train))
+g<-grep("kurtosis_roll_dumbbell", colnames(train))
+h<-grep("amplitude_yaw_dumbbell", colnames(train))
+i<-grep("var_accel_dumbbell", colnames(train))
+j<-grep("var_yaw_dumbbell", colnames(train))
+k<-grep("kurtosis_roll_forearm", colnames(train))
+l<-grep("amplitude_yaw_forearm", colnames(train))
+m<-grep("var_accel_forearm", colnames(train))
+n<-grep("var_yaw_forearm", colnames(train))
+col_out<-c(1:7, a:b, c:d, e:f, g:h, i:j, k:l, m:n)
+train1<-train[ ,-col_out]
+##take out the same columns from test set
+test1<-test[ ,-col_out]
+```
+
+We will pre-process the data with Principal Component Analysis. This is because there are a large number of variables, not all of which add predictive value. Based on a comparison of the accuracy of various models, the best threshold appears to be 80%.
+
+```{r preproc, cache=TRUE, message=FALSE, warning=F}
+##do PCA (omitting outcome of classe) with a threshold of 80%
+library(caret)
+preProc<-preProcess(train1[ ,-53], method="pca", thresh = .8)
+train1_pc<-predict(preProc, train1[ ,-53])
+train1_pc<-data.frame(train1_pc, train1$classe)
+
+##apply principal components to test set for later use
+test1_pc<-predict(preProc, test1[ ,-53])
+```
+
+#Establishing Accuracy
+In order to calculate out of sample error, we must first establish what the relevant classe variables are for the test data. We cannot say how accurate the prediction is if there are no true values against which to compare it. In its raw form, the testing data does not contain values for class. For reasons discussed above, I did not use username and time stamp data to predict class. However, for purposes of establishing out of sample error (i.e. the classe values for the test data) these are the best predictors.
+
+The values we will regard as true values for purposes of calculating **out of sample error** are:
+
+```{r true, cache=TRUE, message=FALSE, warning=F}
+##get "true" classe values for test1 based on combo of user_name, raw_timestamp_part_1
+names<-NULL
+for (i in 1:nrow(test1)){name<-unique(train[which(train$user_name==test$user_name[i] & train$raw_timestamp_part_1==test$raw_timestamp_part_1[i]), ][160])[[1]]; names<-c(names, levels(name)[name])}
+##if you want to convert resulting back to factor for comparison with train data
+names<-as.factor(names)
+print(names)
+```
+
+
+#Choice of Model
+We will combine three different models: CART (rpart), random forest, and linear discriminant analysis. A generalized boosting model, while possibly useful, would take too much time for purposes of this analysis.
+
+The predictions for rpart are:
+```{r rpart, cache=TRUE, message=FALSE, warning=F}
+rpartFit<-train(train1.classe~., method="rpart", data=train1_pc)
+pred_rpart<-predict(rpartFit, test1_pc)
+print(pred_rpart)
+```
+with an accuracy of: 
+```{r rpartAccuracy, cache=TRUE, message=FALSE, warning=F}
+unname(confusionMatrix(names, pred_rpart)$overall[1])
+```
+
+The predictions for random forest are:
+```{r rf, cache=TRUE, message=FALSE, warning=F}
+rf_fit<-train(train1.classe~., method="rpart", data=train1_pc)
+pred_rf<-predict(rf_fit, test1_pc)
+print(pred_rf)
+```
+with an accuracy of: 
+```{r rfAccuracy, cache=TRUE, message=FALSE, warning=F}
+unname(confusionMatrix(names, pred_rf)$overall[1])
+```
+
+The predictions for linear discriminant analysis:
+```{r lda, cache=TRUE, message=FALSE, warning=F}
+lda_fit<-train(train1.classe~., method="lda", data=train1_pc)
+pred_lda<-predict(lda_fit, test1_pc)
+print(pred_lda)
+```
+with an accuracy of: 
+```{r ldaAccuracy, cache=TRUE, message=FALSE, warning=F}
+unname(confusionMatrix(names, pred_lda)$overall[1])
+```
+The predictions for the combined model are:
+```{r combine, cache=TRUE, message=FALSE, warning=F}
+##create combined data frame of prediction values
+predDF<-data.frame(pred_rpart, pred_rf, pred_lda, names)
+##create a new model fitting predictions to outcome
+combModFit<-train(names~., method="rf", data=predDF)
+##create new prediction based on new model
+comPred<-predict(combModFit, predDF)
+print(comPred)
+```
+
+and the accuracy for this model is:
+```{r combAccuracy, cache=TRUE, message=FALSE, warning=F}
+unname(confusionMatrix(names, comPred)$overall[1])
+```
+
+#Summary
+A combined model analysis using rpart, random forest, and linear discriminant analysis is more accurate than each model individually. Based on our assumptions of what the true values of classe are in the test set, we see an accuracy (out of sample error) of 80%.
+

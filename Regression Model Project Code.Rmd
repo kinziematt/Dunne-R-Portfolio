@@ -1,0 +1,61 @@
+---
+title: "Course Project"
+author: "Matthew Dunne"
+date: "September 29, 2017"
+output:
+  word_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+#Executive Summary
+Is an automatic or manual transmission better for MPG? While a quick inspection of the mtcars data would suggest automatic transmissions is significantly better for mpg, we see essentially no difference when we control for weight.
+
+```{r mtcars, cache=TRUE}
+data(mtcars)
+```
+#Exploring the Data
+Looking at the data we see several variables that might affect mpg in addition to whether a car has an automatic or manual transmission. These include number of cylinders, weight, and speed (qsec=1/4 mile time).
+head(mtcars, 2)
+```{r explore, cache=TRUE}
+head(mtcars, 3)
+```
+
+Here we see that the median mpg (y-axis) for automatics (1) is significantly above the median mpg for manuals (0). Also the spread of data points suggest that cars with automatic transmission tend to have higher mpg than manuals.
+
+```{r first, cache=TRUE}
+boxplot(mpg~am, data=mtcars, col="blue")
+```
+
+Now let's see what happens when we separately account for weight and speed. In the plot below on the left we see that, even when distinguishing by transmission, there seems to be a linear relationship between mpg and weight. In the plot on the right, there is no apparent linear relationship between mpg and speed (qsec). Automatics get better mpg than manuals as previously seen.
+
+```{r second, cache=TRUE}
+par(mfrow=c(1,2))
+with(mtcars, plot(wt, mpg, col=as.factor(am), pch=20))
+with(mtcars, plot(qsec, mpg, col=as.factor(am), pch=20))
+```
+
+#Choice of Model, Interpretation, and Uncertainty
+Because we see possible linear relationship between mpg and weight we will incorporate that into our model. Specifically, we will how whether automatic or manual transmissions have better mpg when accounting for weight. We will mean center the weight variable because no car has a weight of 0.
+```{r model, cache=TRUE}
+fit<-lm(mpg~I(wt-mean(wt))+am, data=mtcars)
+sumcoeff<-summary(fit)$coef
+sumcoeff
+```
+
+Under this model, automatics have a slightly lower mpg (20.10-0.02 or 20.08). This is somewhat surprising given our boxplot. However this requires some interpretation. First we will look at the confidence interval of the intercept for automatic and second its probability
+```{r ci}
+sumcoeff[3,1]+c(-1,1)*qt(.975, df=fit$df)*sumcoeff[3,2]
+```
+As we might have suspected, the confidence interval is almost evenly split between values above the intercept for manuals and values below. Also notice the probability of the t-value is about 0.99 which means we fail to reject the null hypothesis (that there is no difference in mpg for automatics and manuals when we hold weight constant).
+
+#Residuals and Diagnostics
+To examine how well our model fits the data we will plot the interaction of our predicted values (x-axis) and residuals (y-axis)
+```{r resid}
+plot(predict(fit), resid(fit))
+```
+
+There is no discernible pattern to the residuals, suggesting the model is a relatively good fit.
